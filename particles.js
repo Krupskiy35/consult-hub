@@ -432,7 +432,19 @@
             height
         );
 
-        const [r, g, b] = CONFIG.color;
+        // Градієнт CONSULT HUB
+// Зліва блакитний, справа білий
+
+        const gradientStart = [255, 255, 255]; // Білий зліва
+        const gradientEnd = [35, 205, 255];    // Яскравий блакитний справа
+
+        const gradientLeft = Math.min(
+            ...particles.map(p => p.tx)
+        );
+
+        const gradientRight = Math.max(
+            ...particles.map(p => p.tx)
+        );
 
         const hoverRadius =
             CONFIG.hoverRadius *
@@ -593,8 +605,34 @@
             );
 
             // Блакитний контур кільця
+
+            const t = clamp(
+                (p.tx - gradientLeft) /
+                Math.max(1, gradientRight - gradientLeft),
+                0,
+                1
+            );
+
+            const r = Math.round(
+                gradientStart[0] +
+                (gradientEnd[0] - gradientStart[0]) * t
+            );
+
+            const g = Math.round(
+                gradientStart[1] +
+                (gradientEnd[1] - gradientStart[1]) * t
+            );
+
+            const b = Math.round(
+                gradientStart[2] +
+                (gradientEnd[2] - gradientStart[2]) * t
+            );
+
+            const brighterAlpha = Math.min(1, alpha * 1.5);
+
             ctx.strokeStyle =
-                `rgba(${r},${g},${b},${alpha})`;
+                `rgba(${r},${g},${b},${brighterAlpha})`;
+
 
             ctx.lineWidth = ringWidth;
 
