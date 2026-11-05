@@ -2,6 +2,7 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
+
 /* 01 · Base & typography */
 :root {
     --navy: #0F2D52;
@@ -594,6 +595,7 @@ button {
     align-items: flex-start;
     gap: 24px;
     min-height: 270px;
+    border-radius: 15px;
     transition: transform .4s cubic-bezier(.2, .7, .2, 1), box-shadow .4s, background .4s;
 }
 
@@ -634,15 +636,22 @@ button {
 }
 
 .text-link {
-    color: #4fc3ff;
+    color: white;
+    height: 60px;
+    padding: 10px 20px;
     font-size: 15px;
     font-weight: 800;
     display: inline-flex;
     align-items: center;
     gap: 10px;
     margin-bottom: 40px;
+    background: #4fc3ff;
+    transition: 0.5s ease;
 }
-
+.text-link:hover{
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px #0002;
+}
 .about-strip {
     background: #e4f2ff;
     display: flex;
@@ -655,6 +664,7 @@ button {
     font-size: 15px;
     color: #526782;
     border: 1px solid #dbeaff;
+    border-radius: 15px;
 }
 
 .about-strip span {
@@ -835,21 +845,18 @@ button {
 .why-list{
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    justify-content: center;
 }
 .why-list article {
     display: flex;
     gap: 22px;
-    padding: 22px 0;
-    border-bottom: 1px solid #e6edf5;
+    padding: 22px 22px;
+    border: 1px solid #e6edf5;
+    border-radius: 15px;
     transition: padding-left .3s, background .3s;
     align-items: flex-start;
-    background: white;
-    margin-bottom: 5px;
-}
-
-.why-list article:first-child {
-    padding-top: 0;
+    background: #f7fafd;
+    margin-bottom: 15px;
 }
 
 .why-list article > span {
@@ -1150,6 +1157,7 @@ button {
     position: relative;
     overflow: hidden;
     isolation: isolate;
+    border-radius: 15px;
     transition: background .4s, border-color .4s, box-shadow .4s, transform .4s;
 }
 
@@ -1328,6 +1336,7 @@ button {
     background: #f6f9fc;
     margin-bottom: 8px;
     padding: 0 15px;
+    border-radius: 15px;
 }
 
 .faq-item summary {
@@ -1451,7 +1460,9 @@ button {
     gap: 9px;
     margin-top: 70px;
 }
-
+.colorw{
+    color: white;
+}
 .contact-symbol i {
     border-radius: 9px;
 }
@@ -1462,6 +1473,7 @@ button {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
+    border-radius: 15px;
 }
 
 .contact-form .button {
@@ -2847,6 +2859,3 @@ button {
         font-size: 20px;
     }
 }
-
-
-
