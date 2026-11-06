@@ -1,87 +1,77 @@
 
-/*
- * CONSULT HUB — HYBRID RING PARTICLES v9
- *
- * Маленькі блакитні кільця замість крапок.
- * Збирання напису, реакція на курсор,
- * плавне повернення та адаптивність.
- */
+/* CONSULT HUB — PARTICLE DISSOLVE
+   Intro: particles assemble into logo and wordmark.
+   Rest: crisp solid white.
+   Hover: local dissolve into flying white particles.
+   Exit: smooth reassembly.
+*/
 
 (() => {
-    "use strict";
+    'use strict';
 
-    const canvas = document.getElementById(
-        "consult-particles-canvas"
-    );
+    const canvas = document.getElementById('consult-particles-canvas');
+    if (!canvas || canvas.dataset.ready) return;
 
-    const hero = canvas?.closest(".hero");
+    const box = canvas.closest('.consult-particles');
+    if (!box) return;
 
-    if (!canvas || !hero) return;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    const mask = document.createElement('canvas');
+    const mc = mask.getContext('2d', { willReadFrequently: true });
 
-    const ctx = canvas.getContext("2d");
+    if (!ctx || !mc) return;
+    canvas.dataset.ready = '1';
 
-    if (!ctx) return;
+    const CFG = {
+        logoSrc: 'assets/consult-symbol.png',
+        text: box.dataset.particlesText || 'CONSULT HUB',
+        font: 'Montserrat, Arial, sans-serif',
+        weight: 300,
 
-    const CONFIG = {
-        text: "CONSULT HUB",
+        // Current wordmark proportions
+        textStretchY: 1.12,
+        textOffsetY: 25,
 
-        // Колір Consult Hub — #39BAFA
-        color: [57, 186, 250],
+        // Intro animation
+        introMs: 1800,
+        introScatter: 305,
+        introCount: 8500,
 
-        // Зовнішній вигляд кілець
-        opacity: 0.9,
-        referenceFontSize: 180,
-        referenceStretchY: 1.6,
-        referenceSpacing: 5,
+        // Hover dissolve
+        hoverRadius: 115,
+        hoverPush: 95,
+        hoverGap: 1,
+        hoverDotSize: 1.8,
+        hoverEase: 0.12,
+        scatterStrength: 1.0,
 
-        // Радіус кільця та товщина контуру
-        referenceRingRadius: 1.4,
-        referenceRingWidth: 0.65,
+        // Particle physics
+        spring: 0.055,
+        damping: 0.82,
+        turbulence: 0.75,
 
-        // Анімація збирання
-        appearDuration: 2400,
-        appearDelay: 500,
-        particleDelay: 850,
-        scatterRadius: 0.28,
-
-        // Реакція на курсор
-        hoverRadius: 135,
-        hoverForce: 48,
-        hoverEase: 0.13,
-        returnEase: 0.055,
-
-        // Мерехтіння
-        pulseSpeed: 0.0013,
-        pulseAmount: 0.08,
-
-        // Продуктивність
-        maxDpr: 2
+        dprMax: 2
     };
 
-    const reducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-    );
+    const logo = new Image();
 
-    const TAU = Math.PI * 2;
-
-    let width = 0;
-    let height = 0;
+    let logoReady = false;
+    let W = 1;
+    let H = 1;
     let dpr = 1;
 
+    let points = [];
+    let intro = [];
     let particles = [];
-    let reference = null;
 
-    let ringRadius = 1.4;
-    let ringWidth = 0.65;
+    let elapsed = 0;
+    let startedAt = null;
+    let finished = false;
 
-    let rafId = null;
-    let startTime = null;
-    let lastTime = null;
-
-    let isVisible = true;
-    let isReady = false;
-
-    let resizeTimer = null;
+    let raf = 0;
+    let visible = true;
+    let hoverStrength = 0;
+    let previousTime = 0;
 
     const pointer = {
         x: -10000,
@@ -89,711 +79,593 @@
         active: false
     };
 
-    // =========================================
-    // 01. ДОПОМІЖНІ ФУНКЦІЇ
-    // =========================================
+    const reduce = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+    );
 
-    function clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
-    }
+    const clamp = (x, a = 0, b = 1) =>
+        Math.max(a, Math.min(b, x));
 
-    function random(min, max) {
-        return min + Math.random() * (max - min);
-    }
+    const ease = x =>
+        1 - Math.pow(1 - clamp(x), 3);
 
-    function easeOutCubic(t) {
-        return 1 - Math.pow(1 - t, 3);
-    }
+    const rand = (a, b) =>
+        a + Math.random() * (b - a);
 
-    // =========================================
-    // 02. СТВОРЕННЯ МАСКИ НАПИСУ
-    // =========================================
-
-    function createReferenceMask() {
-        const fontSize = CONFIG.referenceFontSize;
-
-        const measureCanvas =
-            document.createElement("canvas");
-
-        const measureCtx =
-            measureCanvas.getContext("2d");
-
-        if (!measureCtx) return null;
-
-        measureCtx.font =
-            `900 ${fontSize}px Intel, sans-serif`;
-
-        const measuredWidth =
-            measureCtx.measureText(CONFIG.text).width;
-
-        const padding = 32;
-
-        const maskWidth = Math.ceil(
-            measuredWidth + padding * 2
-        );
-
-        const maskHeight = Math.ceil(
-            fontSize *
-            CONFIG.referenceStretchY *
-            1.5
-        );
-
-        const mask = document.createElement("canvas");
-
-        mask.width = maskWidth;
-        mask.height = maskHeight;
-
-        const mctx = mask.getContext("2d", {
-            willReadFrequently: true
-        });
-
-        if (!mctx) return null;
-
-        mctx.save();
-
-        mctx.translate(
-            maskWidth / 2,
-            maskHeight / 2
-        );
-
-        mctx.scale(
-            1,
-            CONFIG.referenceStretchY
-        );
-
-        mctx.font =
-            `900 ${fontSize}px Intel, sans-serif`;
-
-        mctx.textAlign = "center";
-        mctx.textBaseline = "middle";
-        mctx.fillStyle = "#ffffff";
-
-        mctx.fillText(CONFIG.text, 0, 0);
-
-        mctx.restore();
-
-        const imageData = mctx.getImageData(
-            0,
-            0,
-            maskWidth,
-            maskHeight
-        ).data;
-
-        const points = [];
-
-        const spacing = CONFIG.referenceSpacing;
-
-        let minX = Infinity;
-        let maxX = -Infinity;
-        let minY = Infinity;
-        let maxY = -Infinity;
-
-        for (
-            let y = 0;
-            y < maskHeight;
-            y += spacing
-        ) {
-            for (
-                let x = 0;
-                x < maskWidth;
-                x += spacing
-            ) {
-                const alpha = imageData[
-                (y * maskWidth + x) * 4 + 3
-                    ];
-
-                if (alpha < 130) continue;
-
-                points.push({ x, y });
-
-                minX = Math.min(minX, x);
-                maxX = Math.max(maxX, x);
-                minY = Math.min(minY, y);
-                maxY = Math.max(maxY, y);
-            }
+    function schedule() {
+        if (!raf && visible) {
+            raf = requestAnimationFrame(tick);
         }
-
-        if (!points.length) return null;
-
-        return {
-            points,
-            minX,
-            maxX,
-            minY,
-            maxY,
-            textWidth: maxX - minX + spacing,
-            textHeight: maxY - minY + spacing
-        };
     }
 
-    // =========================================
-    // 03. РОЗМІРИ CANVAS
-    // =========================================
+    function dot(x, y, size) {
+        ctx.fillRect(
+            x - size / 2,
+            y - size / 2,
+            size,
+            size
+        );
+    }
 
-    function resizeCanvas() {
-        const rect = hero.getBoundingClientRect();
+    function rebuild() {
+        const r = box.getBoundingClientRect();
 
-        width = Math.max(1, rect.width);
-        height = Math.max(1, rect.height);
+        W = Math.max(1, Math.round(r.width));
+        H = Math.max(1, Math.round(r.height));
 
         dpr = Math.min(
             window.devicePixelRatio || 1,
-            CONFIG.maxDpr
+            CFG.dprMax
         );
 
-        canvas.width = Math.round(width * dpr);
-        canvas.height = Math.round(height * dpr);
+        canvas.width = mask.width = Math.round(W * dpr);
+        canvas.height = mask.height = Math.round(H * dpr);
 
-        ctx.setTransform(
-            dpr, 0,
-            0, dpr,
-            0, 0
-        );
-    }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        mc.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // =========================================
-    // 04. СТВОРЕННЯ ЧАСТИНОК
-    // =========================================
+        mc.clearRect(0, 0, W, H);
 
-    function buildParticles() {
-        resizeCanvas();
+        const parent = box.parentElement;
+        const symbolSlot = parent.querySelector('.hero-symbol-slot');
+        const wordSlot = parent.querySelector('.hero-wordmark-slot');
 
-        if (!reference) {
-            reference = createReferenceMask();
-        }
+        if (!symbolSlot || !wordSlot) return;
 
-        if (!reference) {
-            isReady = false;
-            return;
-        }
+        const base = box.getBoundingClientRect();
+        const sr = symbolSlot.getBoundingClientRect();
+        const wr = wordSlot.getBoundingClientRect();
 
-        const isMobile = width <= 760;
+        const mobile = window.innerWidth <= 760;
 
-        const isTablet =
-            width > 760 && width <= 1024;
+        // LOGO POSITION
+        const logoSize = Math.min(sr.width, sr.height) * 1.25;
 
-        // Зберігаємо розташування напису
-        const targetWidth = width * (
-            isMobile ? 0.94 :
-                isTablet ? 0.88 :
-                    0.96
-        );
+        const logoX =
+            sr.left - base.left +
+            (sr.width - logoSize) / 2;
 
-        const maxTextHeight = height * (
-            isMobile ? 0.16 :
-                isTablet ? 0.20 :
-                    0.35
+        const logoY =
+            sr.top - base.top +
+            (sr.height - logoSize) / 2;
+
+        // MONTSERRAT WORDMARK
+        const textPad = mobile ? 2 : 3;
+        const available = Math.max(1, wr.width - textPad * 2);
+
+        let size = Math.min(
+            wr.height * 0.95,
+            mobile ? 70 : 270
         );
 
-        const scale = Math.min(
-            targetWidth / reference.textWidth,
-            maxTextHeight / reference.textHeight
+        mc.font = `${CFG.weight} ${size}px ${CFG.font}`;
+
+        size *= Math.min(
+            1,
+            available / Math.max(1, mc.measureText(CFG.text).width)
         );
 
-        const centerX = width / 2;
+        mc.font = `${CFG.weight} ${size}px ${CFG.font}`;
 
-        let centerY;
+        const metrics = mc.measureText(CFG.text);
+        const textWidth = metrics.width;
 
-        if (isMobile) {
-            centerY = height * 0.16;
-        } else if (isTablet) {
-            centerY = height * 0.22;
-        } else {
-            centerY = height * 0.35;
-        }
+        const ascent =
+            metrics.actualBoundingBoxAscent || size * 0.74;
 
-        const halfTextHeight =
-            reference.textHeight * scale / 2;
+        const descent =
+            metrics.actualBoundingBoxDescent || size * 0.04;
 
-        centerY = Math.max(
-            centerY,
-            halfTextHeight + 12
+        const textHeight = ascent + descent;
+
+        const textX =
+            wr.left - base.left +
+            (mobile
+                ? (wr.width - textWidth) / 2
+                : textPad);
+
+        const textY =
+            wr.top - base.top +
+            (wr.height - textHeight) / 2 +
+            CFG.textOffsetY;
+
+        mc.fillStyle = '#ffffff';
+        mc.textBaseline = 'alphabetic';
+        mc.textAlign = 'left';
+
+        mc.save();
+        mc.translate(0, textY);
+        mc.scale(1, CFG.textStretchY);
+        mc.fillText(
+            CFG.text,
+            textX,
+            ascent / CFG.textStretchY
         );
+        mc.restore();
 
-        // Розмір кілець адаптується до екрана
-        ringRadius = clamp(
-            CONFIG.referenceRingRadius * scale,
-            0.8,
-            1.4
-        );
+        // WHITE LOGO
+        if (logoReady && logoSize > 0) {
+            const tmp = document.createElement('canvas');
 
-        ringWidth = clamp(
-            CONFIG.referenceRingWidth * scale,
-            0.45,
-            0.65
-        );
-
-        const refCenterX =
-            (reference.minX + reference.maxX) / 2;
-
-        const refCenterY =
-            (reference.minY + reference.maxY) / 2;
-
-        const scatterDistance =
-            Math.min(width, height) *
-            CONFIG.scatterRadius;
-
-        particles = reference.points.map(point => {
-            const tx =
-                centerX +
-                (point.x - refCenterX) * scale;
-
-            const ty =
-                centerY +
-                (point.y - refCenterY) * scale;
-
-            const angle = random(0, TAU);
-
-            const distance = random(
-                scatterDistance * 0.3,
-                scatterDistance
+            tmp.width = tmp.height = Math.max(
+                1,
+                Math.round(logoSize * dpr)
             );
 
-            const startX =
-                tx + Math.cos(angle) * distance;
+            const tc = tmp.getContext('2d');
 
-            const startY =
-                ty + Math.sin(angle) * distance;
+            if (tc) {
+                tc.setTransform(dpr, 0, 0, dpr, 0, 0);
+                tc.drawImage(logo, 0, 0, logoSize, logoSize);
 
-            return {
-                tx,
-                ty,
+                tc.globalCompositeOperation = 'source-in';
+                tc.fillStyle = '#ffffff';
+                tc.fillRect(0, 0, logoSize, logoSize);
 
-                x: startX,
-                y: startY,
-
-                vx: 0,
-                vy: 0,
-
-                startX,
-                startY,
-
-                delay: random(
-                    0,
-                    CONFIG.particleDelay
-                ),
-
-                phase: random(0, TAU),
-
-                opacityFactor: random(0.75, 1),
-                sizeFactor: random(0.85, 1.15),
-
-                reaction: 0
-            };
-        });
-
-        startTime = null;
-        lastTime = null;
-
-        isReady = true;
-    }
-
-    // =========================================
-    // 05. МАЛЮВАННЯ МАЛЕНЬКИХ КІЛЕЦЬ
-    // =========================================
-
-    function drawRing(x, y, radius) {
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, TAU);
-        ctx.stroke();
-    }
-
-    // =========================================
-    // 06. ОСНОВНА АНІМАЦІЯ
-    // =========================================
-
-    function draw(time) {
-        rafId = null;
-
-        if (!isVisible || !isReady) return;
-
-        if (startTime === null) {
-            startTime = time;
+                mc.drawImage(
+                    tmp,
+                    logoX,
+                    logoY,
+                    logoSize,
+                    logoSize
+                );
+            }
         }
 
-        const dt = lastTime === null
-            ? 1
-            : clamp(
-                (time - lastTime) / 16.667,
-                0.1,
-                2
-            );
+        // SAMPLE PARTICLES FOR HOVER
+        const pixels = mc.getImageData(
+            0, 0, mask.width, mask.height
+        ).data;
 
-        lastTime = time;
+        points = [];
 
-        const elapsed = time - startTime;
-
-        const staticMode = reducedMotion.matches;
-
-        ctx.clearRect(
-            0,
-            0,
-            width,
-            height
-        );
-
-        // Градієнт CONSULT HUB
-// Зліва блакитний, справа білий
-
-        const gradientStart = [255, 255, 255]; // Білий зліва
-        const gradientEnd = [35, 205, 255];    // Яскравий блакитний справа
-
-        const gradientLeft = Math.min(
-            ...particles.map(p => p.tx)
-        );
-
-        const gradientRight = Math.max(
-            ...particles.map(p => p.tx)
-        );
-
-        const hoverRadius =
-            CONFIG.hoverRadius *
-            clamp(width / 1440, 0.55, 1);
-
-        const hoverForce =
-            CONFIG.hoverForce *
-            clamp(width / 1440, 0.45, 1);
-
-        for (const p of particles) {
-
-            // Поява частинок
-            const progress = staticMode
-                ? 1
-                : clamp(
-                    (
-                        elapsed -
-                        CONFIG.appearDelay -
-                        p.delay
-                    ) / CONFIG.appearDuration,
-                    0,
-                    1
+        for (let y = CFG.hoverGap / 2; y < H; y += CFG.hoverGap) {
+            for (let x = CFG.hoverGap / 2; x < W; x += CFG.hoverGap) {
+                const px = Math.min(
+                    mask.width - 1,
+                    Math.floor(x * dpr)
                 );
 
-            if (progress <= 0) continue;
+                const py = Math.min(
+                    mask.height - 1,
+                    Math.floor(y * dpr)
+                );
 
-            const ease = easeOutCubic(progress);
-            const assembling = progress < 1;
+                const alpha =
+                    pixels[(py * mask.width + px) * 4 + 3];
 
-            let targetX = p.tx;
-            let targetY = p.ty;
-
-            // Збирання напису
-            if (assembling) {
-                targetX =
-                    p.startX +
-                    (p.tx - p.startX) * ease;
-
-                targetY =
-                    p.startY +
-                    (p.ty - p.startY) * ease;
+                if (alpha > 125) {
+                    points.push({
+                        x,
+                        y,
+                        angle: rand(0, Math.PI * 2),
+                        phase: rand(0, Math.PI * 2)
+                    });
+                }
             }
+        }
 
-            // Реакція на курсор
-            let influence = 0;
+        particles = [];
+
+        // INTRO PARTICLES
+        if (!finished) {
+            intro = [];
+
+            const step = Math.max(
+                1,
+                Math.ceil(points.length / CFG.introCount)
+            );
+
+            for (let i = 0; i < points.length; i += step) {
+                const p = points[i];
+                const angle = rand(0, Math.PI * 2);
+                const distance = rand(25, CFG.introScatter);
+
+                intro.push({
+                    x0: p.x + Math.cos(angle) * distance,
+                    y0: p.y + Math.sin(angle) * distance,
+                    x: p.x,
+                    y: p.y,
+                    delay: rand(0, 0.2)
+                });
+            }
+        }
+
+        draw();
+        schedule();
+    }
+
+    function createParticles() {
+        const radius = CFG.hoverRadius;
+        const radius2 = radius * radius;
+
+        const occupied = new Set(
+            particles.map(p => p.id)
+        );
+
+        for (let i = 0; i < points.length; i++) {
+            if (occupied.has(i)) continue;
+
+            const p = points[i];
+
+            const dx = p.x - pointer.x;
+            const dy = p.y - pointer.y;
+            const dist2 = dx * dx + dy * dy;
+
+            if (dist2 > radius2) continue;
+
+            const distance = Math.sqrt(dist2);
+            const force = Math.pow(
+                1 - distance / radius,
+                0.65
+            );
+
+            const angle = p.angle;
+
+            particles.push({
+                id: i,
+                homeX: p.x,
+                homeY: p.y,
+                x: p.x,
+                y: p.y,
+                vx: Math.cos(angle) * CFG.hoverPush * force * 0.08,
+                vy: Math.sin(angle) * CFG.hoverPush * force * 0.08,
+                phase: p.phase,
+                life: 1
+            });
+
+            occupied.add(i);
+        }
+    }
+
+    function updateParticles(dt) {
+        const step = Math.min(2.5, dt / 16.67);
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+
+            const dx = p.x - pointer.x;
+            const dy = p.y - pointer.y;
+            const dist = Math.hypot(dx, dy);
 
             if (
                 pointer.active &&
-                !staticMode &&
-                !assembling
+                dist < CFG.hoverRadius &&
+                dist > 0
             ) {
-                const dx = p.x - pointer.x;
-                const dy = p.y - pointer.y;
+                const force =
+                    (1 - dist / CFG.hoverRadius) *
+                    CFG.scatterStrength;
 
-                const distance = Math.hypot(
-                    dx,
-                    dy
-                );
+                p.vx += (dx / dist) * force * 2.5 * step;
+                p.vy += (dy / dist) * force * 2.5 * step;
 
-                if (distance < hoverRadius) {
-                    const t =
-                        1 - distance / hoverRadius;
+                p.vx += Math.sin(p.phase * 3) *
+                    CFG.turbulence * step;
 
-                    influence = t * t;
-
-                    const safeDistance =
-                        Math.max(distance, 1);
-
-                    p.vx +=
-                        (dx / safeDistance) *
-                        hoverForce *
-                        influence *
-                        0.09 *
-                        dt;
-
-                    p.vy +=
-                        (dy / safeDistance) *
-                        hoverForce *
-                        influence *
-                        0.09 *
-                        dt;
-                }
+                p.vy += Math.cos(p.phase * 2) *
+                    CFG.turbulence * step;
             }
 
-            const reactionEase =
-                influence > p.reaction
-                    ? CONFIG.hoverEase
-                    : CONFIG.returnEase;
+            // RETURN TO ORIGINAL POSITION
+            p.vx += (p.homeX - p.x) * CFG.spring * step;
+            p.vy += (p.homeY - p.y) * CFG.spring * step;
 
-            p.reaction += (
-                influence - p.reaction
-            ) * (
-                1 - Math.pow(
-                    1 - reactionEase,
-                    dt
-                )
-            );
+            p.vx *= Math.pow(CFG.damping, step);
+            p.vy *= Math.pow(CFG.damping, step);
 
-            if (staticMode) {
-                p.x = p.tx;
-                p.y = p.ty;
-                p.vx = 0;
-                p.vy = 0;
+            p.x += p.vx * step;
+            p.y += p.vy * step;
 
-            } else if (assembling) {
-                p.x += (
-                    targetX - p.x
-                ) * (
-                    1 - Math.pow(0.78, dt)
-                );
+            const nearHome =
+                Math.hypot(p.x - p.homeX, p.y - p.homeY) < 1;
 
-                p.y += (
-                    targetY - p.y
-                ) * (
-                    1 - Math.pow(0.78, dt)
-                );
+            const slow =
+                Math.hypot(p.vx, p.vy) < 0.15;
 
-            } else {
-                // Пружне повернення частинок
-                const spring = 0.035;
-
-                const friction = Math.pow(
-                    0.88,
-                    dt
-                );
-
-                p.vx += (
-                    targetX - p.x
-                ) * spring * dt;
-
-                p.vy += (
-                    targetY - p.y
-                ) * spring * dt;
-
-                p.vx *= friction;
-                p.vy *= friction;
-
-                p.x += p.vx * dt;
-                p.y += p.vy * dt;
+            if (!pointer.active && nearHome && slow) {
+                particles.splice(i, 1);
             }
-
-            // Легке мерехтіння
-            const pulse = staticMode
-                ? 1
-                : 1 +
-                Math.sin(
-                    time * CONFIG.pulseSpeed +
-                    p.phase
-                ) * CONFIG.pulseAmount;
-
-            const alpha = clamp(
-                CONFIG.opacity *
-                p.opacityFactor *
-                pulse *
-                ease,
-                0,
-                1
-            );
-
-            // Блакитний контур кільця
-
-            const t = clamp(
-                (p.tx - gradientLeft) /
-                Math.max(1, gradientRight - gradientLeft),
-                0,
-                1
-            );
-
-            const r = Math.round(
-                gradientStart[0] +
-                (gradientEnd[0] - gradientStart[0]) * t
-            );
-
-            const g = Math.round(
-                gradientStart[1] +
-                (gradientEnd[1] - gradientStart[1]) * t
-            );
-
-            const b = Math.round(
-                gradientStart[2] +
-                (gradientEnd[2] - gradientStart[2]) * t
-            );
-
-            const brighterAlpha = Math.min(1, alpha * 1.5);
-
-            ctx.strokeStyle =
-                `rgba(${r},${g},${b},${brighterAlpha})`;
-
-
-            ctx.lineWidth = ringWidth;
-
-            const radius =
-                ringRadius *
-                p.sizeFactor *
-                (1 + p.reaction * 0.12);
-
-            drawRing(
-                p.x,
-                p.y,
-                radius
-            );
-        }
-
-        if (!staticMode) {
-            rafId = requestAnimationFrame(draw);
         }
     }
 
-    // =========================================
-    // 07. ЗАПУСК І ЗУПИНКА
-    // =========================================
+    function draw() {
+        ctx.clearRect(0, 0, W, H);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
 
-    function stop() {
-        if (rafId !== null) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-        }
+        // INTRO
+        if (!finished) {
+            const progress = clamp(elapsed / CFG.introMs);
+            const assembly = clamp(progress / 0.72);
+            const full = ease((progress - 0.68) / 0.32);
 
-        lastTime = null;
-    }
+            ctx.globalAlpha = 1 - full;
 
-    function start() {
-        if (
-            !isVisible ||
-            !isReady ||
-            rafId !== null
-        ) {
+            for (const p of intro) {
+                const t = ease(
+                    (assembly - p.delay) / (1 - p.delay)
+                );
+
+                dot(
+                    p.x0 + (p.x - p.x0) * t,
+                    p.y0 + (p.y - p.y0) * t,
+                    CFG.hoverDotSize
+                );
+            }
+
+            ctx.globalAlpha = full;
+            ctx.drawImage(mask, 0, 0, W, H);
+            ctx.globalAlpha = 1;
             return;
         }
 
-        rafId = requestAnimationFrame(draw);
+        // SOLID WHITE TEXT AND LOGO
+        ctx.drawImage(mask, 0, 0, W, H);
+
+        if (
+            hoverStrength <= 0.003 &&
+            particles.length === 0
+        ) return;
+
+        // LOCAL TRANSPARENT DISSOLVE
+        // No black shadow: destination-out removes alpha.
+        ctx.globalCompositeOperation = 'destination-out';
+
+        if (hoverStrength > 0.003) {
+            const radius = CFG.hoverRadius * hoverStrength;
+
+            if (radius > 1) {
+                const gradient = ctx.createRadialGradient(
+                    pointer.x,
+                    pointer.y,
+                    0,
+                    pointer.x,
+                    pointer.y,
+                    radius
+                );
+
+                gradient.addColorStop(0, 'rgba(0,0,0,0.98)');
+                gradient.addColorStop(0.55, 'rgba(0,0,0,0.9)');
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                ctx.globalAlpha = hoverStrength;
+                ctx.fillStyle = gradient;
+
+                ctx.beginPath();
+                ctx.arc(
+                    pointer.x,
+                    pointer.y,
+                    radius,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        // SMALL HOLES AT DISPLACED PARTICLE HOMES
+        // This makes the original glyph visibly break apart.
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#000000';
+
+        for (const p of particles) {
+            const moved = Math.hypot(
+                p.x - p.homeX,
+                p.y - p.homeY
+            );
+
+            if (moved > 2) {
+                ctx.beginPath();
+                ctx.arc(
+                    p.homeX,
+                    p.homeY,
+                    CFG.hoverGap * 0.65,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        // FLYING WHITE DOTS
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
+
+        for (const p of particles) {
+            dot(
+                p.x,
+                p.y,
+                CFG.hoverDotSize
+            );
+        }
     }
 
-    // =========================================
-    // 08. РЕАКЦІЯ НА КУРСОР
-    // =========================================
+    function tick(time) {
+        raf = 0;
+        if (!visible) return;
 
-    hero.addEventListener(
-        "pointermove",
-        event => {
-            if (event.pointerType !== "mouse") {
-                return;
+        const dt = previousTime
+            ? Math.min(50, time - previousTime)
+            : 16;
+
+        previousTime = time;
+
+        if (!finished) {
+            if (startedAt === null) {
+                startedAt = time - elapsed;
             }
 
-            const rect =
-                hero.getBoundingClientRect();
+            elapsed = time - startedAt;
 
-            pointer.x =
-                event.clientX - rect.left;
+            if (elapsed >= CFG.introMs || reduce.matches) {
+                elapsed = CFG.introMs;
+                finished = true;
+                intro = [];
+            }
 
-            pointer.y =
-                event.clientY - rect.top;
+            draw();
 
+            if (!finished) schedule();
+            return;
+        }
+
+        const target =
+            pointer.active && !reduce.matches ? 1 : 0;
+
+        const blend =
+            1 - Math.pow(1 - CFG.hoverEase, dt / 16.67);
+
+        hoverStrength +=
+            (target - hoverStrength) * blend;
+
+        if (Math.abs(hoverStrength - target) < 0.003) {
+            hoverStrength = target;
+        }
+
+        if (pointer.active && !reduce.matches) {
+            createParticles();
+        }
+
+        if (particles.length) {
+            updateParticles(dt);
+        }
+
+        draw();
+
+        if (
+            pointer.active ||
+            hoverStrength > 0.003 ||
+            particles.length
+        ) {
+            schedule();
+        }
+    }
+
+    function setPointer(e) {
+        const r = canvas.getBoundingClientRect();
+
+        pointer.x = e.clientX - r.left;
+        pointer.y = e.clientY - r.top;
+    }
+
+    const interactionArea = box.parentElement;
+
+    interactionArea.addEventListener(
+        'pointermove',
+        e => {
+            if (!finished || e.pointerType === 'touch') return;
+
+            setPointer(e);
             pointer.active = true;
-        }
+            schedule();
+        },
+        { passive: true }
     );
 
-    hero.addEventListener(
-        "pointerleave",
-        () => {
-            pointer.active = false;
-        }
+    interactionArea.addEventListener('pointerleave', () => {
+        pointer.active = false;
+        schedule();
+    });
+
+    interactionArea.addEventListener(
+        'pointerdown',
+        e => {
+            if (e.pointerType !== 'touch' || !finished) return;
+
+            setPointer(e);
+            pointer.active = true;
+            schedule();
+        },
+        { passive: true }
     );
 
-    window.addEventListener(
-        "blur",
-        () => {
-            pointer.active = false;
-        }
-    );
-
-    // =========================================
-    // 09. ВИДИМІСТЬ HERO
-    // =========================================
-
-    if ("IntersectionObserver" in window) {
-        const observer =
-            new IntersectionObserver(
-                entries => {
-                    isVisible =
-                        entries[0].isIntersecting;
-
-                    if (isVisible) {
-                        start();
-                    } else {
-                        stop();
-                    }
-                },
-                {
-                    threshold: 0.01
-                }
-            );
-
-        observer.observe(hero);
+    function release() {
+        pointer.active = false;
+        schedule();
     }
 
-    // =========================================
-    // 10. АДАПТИВНІСТЬ
-    // =========================================
+    interactionArea.addEventListener('pointerup', release);
+    interactionArea.addEventListener('pointercancel', release);
 
-    window.addEventListener(
-        "resize",
-        () => {
-            clearTimeout(resizeTimer);
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(entries => {
+            const next = entries[0]?.isIntersecting ?? true;
 
-            resizeTimer = setTimeout(
-                () => {
-                    stop();
-                    buildParticles();
-                    start();
-                },
-                150
-            );
-        }
-    );
+            if (next === visible) return;
 
-    // =========================================
-    // 11. REDUCED MOTION
-    // =========================================
+            visible = next;
 
-    function onMotionChange() {
-        stop();
-        start();
+            if (!visible) {
+                if (raf) cancelAnimationFrame(raf);
+                raf = 0;
+                startedAt = null;
+                previousTime = 0;
+            } else {
+                draw();
+                schedule();
+            }
+        }).observe(box);
     }
 
-    if (reducedMotion.addEventListener) {
-        reducedMotion.addEventListener(
-            "change",
-            onMotionChange
-        );
-    } else if (reducedMotion.addListener) {
-        reducedMotion.addListener(
-            onMotionChange
-        );
-    }
+    let resizeFrame = 0;
 
-    // =========================================
-    // 12. ІНІЦІАЛІЗАЦІЯ
-    // =========================================
+    const resizeObserver = new ResizeObserver(() => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(rebuild);
+    });
+
+    resizeObserver.observe(box);
 
     async function init() {
-        if (document.fonts?.ready) {
-            await document.fonts.ready;
-        }
+        try {
+            await document.fonts.load(
+                `${CFG.weight} 100px Montserrat`
+            );
 
-        buildParticles();
-        start();
+            await document.fonts.ready;
+        } catch (_) {}
+
+        logo.onload = () => {
+            logoReady = true;
+            rebuild();
+        };
+
+        logo.onerror = () => {
+            console.warn(
+                'CONSULT HUB: missing logo',
+                CFG.logoSrc
+            );
+        };
+
+        logo.src = CFG.logoSrc;
+
+        if (reduce.matches) finished = true;
+
+        rebuild();
     }
 
     init();
-
 })();
